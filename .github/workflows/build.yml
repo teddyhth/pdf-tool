@@ -27,18 +27,25 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt pyinstaller
-      - name: Smoke test
-        run: python -c "import tkinter, pdftool.core, pdftool.gui; print('ok', tkinter.TkVersion)"
+      - name: Self-test (source)
+        run: python main.py --selftest
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: |
           pyinstaller --noconfirm --onefile --windowed --name PDFTool main.py
+          # 實際啟動打包好的 exe 做自我檢查，失敗就不發布
+          $p = Start-Process dist/PDFTool.exe -ArgumentList "--selftest", "selftest.log" -Wait -PassThru
+          Get-Content selftest.log
+          if ($p.ExitCode -ne 0) { exit 1 }
           Move-Item dist/PDFTool.exe dist/${{ matrix.asset }}
       - name: Build (macOS)
         if: runner.os == 'macOS'
         run: |
           pyinstaller --noconfirm --windowed --name PDFTool --osx-bundle-identifier com.local.pdftool main.py
+          # 實際啟動打包好的 App 做自我檢查，失敗就不發布
+          dist/PDFTool.app/Contents/MacOS/PDFTool --selftest "$PWD/selftest.log" || { cat selftest.log; exit 1; }
+          cat selftest.log
           ditto -c -k --keepParent dist/PDFTool.app dist/${{ matrix.asset }}
 
       - uses: actions/upload-artifact@v4

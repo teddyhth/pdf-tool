@@ -1,2 +1,4 @@
-PyMuPDF>=1.24.10
+# PyMuPDF 2.x 會強制安裝約 200 MB 的 AI 版面分析套件（onnxruntime 等），本工具用不到，
+# 且會導致打包後的執行檔無法啟動，因此固定使用 1.x。
+PyMuPDF>=1.24.10,<2
 Pillow>=10.0

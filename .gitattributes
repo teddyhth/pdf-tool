@@ -1,0 +1,4 @@
+# Windows 批次檔必須是 CRLF，Mac 腳本必須是 LF
+*.bat     text eol=crlf
+*.command text eol=lf
+*.sh      text eol=lf

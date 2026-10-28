@@ -1,0 +1,61 @@
+# 推送 v* 標籤（例如 v1.0.0）時，自動打包 Windows exe 與 Mac App 並發布到 Releases。
+# 也可以在 Actions 頁面手動執行（只產出 artifact，不發布）。
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: PDFTool-Windows.exe
+          - os: macos-latest
+            asset: PDFTool-Mac.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pyinstaller
+      - name: Smoke test
+        run: python -c "import tkinter, pdftool.core, pdftool.gui; print('ok', tkinter.TkVersion)"
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name PDFTool main.py
+          Move-Item dist/PDFTool.exe dist/${{ matrix.asset }}
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --noconfirm --windowed --name PDFTool --osx-bundle-identifier com.local.pdftool main.py
+          ditto -c -k --keepParent dist/PDFTool.app dist/${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true

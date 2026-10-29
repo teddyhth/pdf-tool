@@ -11,8 +11,9 @@ from dataclasses import replace
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import core
+from .page_editor import PageEditor
 
-APP_TITLE = "PDF 解鎖 / 壓縮工具"
+APP_TITLE = "PDF 工具（解鎖 / 壓縮 / 頁面編輯）"
 CUSTOM_PRESET = "自訂"
 
 
@@ -434,11 +435,29 @@ def main() -> None:
     _enable_windows_dpi_awareness()
     root = tk.Tk()
     root.title(APP_TITLE)
-    root.minsize(780, 640)
+    root.minsize(820, 660)
+    root.geometry("1000x720")
     style = ttk.Style(root)
     if sys.platform == "win32" and "vista" in style.theme_names():
         style.theme_use("vista")
-    App(root)
+
+    notebook = ttk.Notebook(root)
+    notebook.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(0, weight=1)
+    tab = ttk.Frame(notebook)
+    App(tab)
+    notebook.add(tab, text="解鎖 / 壓縮")
+    editor = PageEditor(notebook)
+    notebook.add(editor, text="頁面編輯（排序 / 合併）")
+
+    def on_close():
+        if editor.dirty and not messagebox.askyesno(
+                APP_TITLE, "「頁面編輯」有尚未儲存的變更，確定要關閉嗎？", icon="warning"):
+            return
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
     # 從終端機或捷徑啟動時，視窗可能被擋在後面
     root.lift()
     root.attributes("-topmost", True)

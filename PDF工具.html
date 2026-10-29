@@ -1,0 +1,1254 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  安全性：瀏覽器只允許從 jsDelivr 下載固定版本的 MuPDF 引擎，
+  沒有任何連線能把你的 PDF 傳出去（connect-src 只允許該引擎的網址）。
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/mupdf@1.28.1/; connect-src https://cdn.jsdelivr.net/npm/mupdf@1.28.1/; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>PDF 工具</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --text: #1d2129; --muted: #6b7280; --border: #d9dde3;
+  --accent: #2f6fde; --accent-text: #ffffff; --accent-soft: #e3ecfb; --ok: #1f8a4c; --err: #c4362c;
+  --thumb-bg: #eceff3; --input: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171b; --panel: #1f2228; --text: #e6e8ec; --muted: #9aa1ad; --border: #353a43;
+    --accent: #5b8ff0; --accent-text: #ffffff; --accent-soft: #24324b; --ok: #4cc27f; --err: #ef6b61;
+    --thumb-bg: #2a2e35; --input: #171a1f;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --panel: #1f2228; --text: #e6e8ec; --muted: #9aa1ad; --border: #353a43;
+  --accent: #5b8ff0; --accent-text: #ffffff; --accent-soft: #24324b; --ok: #4cc27f; --err: #ef6b61;
+  --thumb-bg: #2a2e35; --input: #171a1f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 14px; }
+h1 { font-size: 22px; margin: 0; }
+.badge { font-size: 13px; color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent);
+  padding: 3px 10px; border-radius: 999px; }
+#engine { font-size: 13px; color: var(--muted); margin-left: auto; }
+#engine.err { color: var(--err); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tabs button { border: 0; background: none; color: var(--muted); padding: 10px 16px; font-size: 15px;
+  cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.panel h2 { font-size: 15px; margin: 0 0 10px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.row + .row { margin-top: 10px; }
+.hint { color: var(--muted); font-size: 13px; }
+button.btn, label.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--text); border-radius: 7px; padding: 6px 12px; font-size: 14px; cursor: pointer; }
+button.btn:hover, label.btn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=password], input[type=text], input[type=number], select {
+  background: var(--input); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 14px; }
+input[type=file] { display: none; }
+input[type=range] { width: 220px; max-width: 100%; }
+.drop { border: 2px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; color: var(--muted); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+th { color: var(--muted); font-weight: 500; }
+td.num { text-align: right; white-space: nowrap; }
+td .pw { width: 120px; }
+.ok { color: var(--ok); } .err { color: var(--err); }
+a.dl { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
+progress { width: 100%; height: 8px; margin-top: 10px; accent-color: var(--accent); }
+.table-scroll { overflow-x: auto; }
+
+/* 頁面編輯 */
+.editor { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 800px) { .editor { grid-template-columns: 1fr; } }
+.side { display: flex; flex-direction: column; min-width: 0; }
+.grid { flex: 1; min-height: 420px; max-height: 68vh; overflow-y: auto; background: var(--thumb-bg);
+  border-radius: 8px; padding: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 10px; align-content: start; outline: none; margin-top: 10px; }
+.grid.over { box-shadow: inset 0 0 0 2px var(--accent); }
+.grid .empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 60px 10px; white-space: pre-line; }
+.cell { position: relative; border: 2px solid transparent; border-radius: 8px; padding: 6px 4px 4px; text-align: center;
+  cursor: grab; user-select: none; -webkit-user-select: none; }
+.cell.sel { background: var(--accent-soft); border-color: var(--accent); }
+.cell .imgbox { height: 150px; display: flex; align-items: center; justify-content: center; }
+.cell img { max-width: 110px; max-height: 150px; box-shadow: 0 1px 3px rgba(0,0,0,.25); background: #fff; pointer-events: none; }
+.cell img.r90, .cell img.r270 { max-width: 150px; max-height: 110px; }
+.cell .ph { width: 90px; height: 120px; background: #fff; opacity: .6; border: 1px solid var(--border); }
+.cell .cap { font-size: 12px; margin-top: 4px; line-height: 1.35; }
+.cell .src { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell.ins-before::before, .cell.ins-after::after { content: ""; position: absolute; top: 4px; bottom: 4px; width: 4px;
+  background: var(--accent); border-radius: 2px; }
+.cell.ins-before::before { left: -9px; } .cell.ins-after::after { right: -9px; }
+.grid.ins-end { box-shadow: inset -4px 0 0 var(--accent); }
+.status { margin-top: 8px; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PDF 工具</h1>
+    <span class="badge">🔒 檔案只在瀏覽器內處理，不會上傳</span>
+    <span id="engine">正在載入 PDF 引擎…</span>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="compress" class="active">解鎖 / 壓縮</button>
+    <button data-tab="pages">頁面編輯（排序 / 合併）</button>
+  </nav>
+
+  <!-- ====================== 解鎖 / 壓縮 ====================== -->
+  <section id="tab-compress">
+    <div class="panel">
+      <div class="drop" id="drop">
+        把 PDF 拖到這裡，或
+        <label class="btn" for="file-input">選擇檔案…</label>
+        <input id="file-input" type="file" accept=".pdf,application/pdf" multiple>
+      </div>
+      <div class="table-scroll">
+        <table id="file-table" class="hidden">
+          <thead><tr><th>檔案</th><th>頁數</th><th>大小</th><th>加密</th><th>狀態 / 結果</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="clear-files">清空清單</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>操作</h2>
+      <div class="row">
+        <label><input type="checkbox" id="op-unlock" checked> 移除密碼與限制（解鎖）</label>
+        <label><input type="checkbox" id="op-compress" checked> 壓縮</label>
+      </div>
+      <div class="row">
+        開啟密碼：<input type="password" id="password" placeholder="多個檔案相同時填這裡" autocomplete="off">
+        <span class="hint">只有權限限制的檔案不需密碼；個別檔案也可以在清單裡填。</span>
+      </div>
+    </div>
+
+    <div class="panel" id="compress-settings">
+      <h2>壓縮設定</h2>
+      <div class="row">
+        預設：<select id="preset"></select>
+      </div>
+      <div class="row">
+        <span style="width:130px">圖片解析度 (DPI)</span>
+        <input type="range" id="dpi" min="50" max="300" step="1"><span id="dpi-val"></span>
+      </div>
+      <div class="row">
+        <span style="width:130px">JPEG 品質</span>
+        <input type="range" id="quality" min="10" max="95" step="1"><span id="quality-val"></span>
+      </div>
+      <div class="row hint">DPI 越低、品質越低 → 檔案越小。螢幕閱讀 100–150、列印 200–300。</div>
+      <div class="row">
+        <label><input type="checkbox" id="gray"> 圖片轉灰階</label>
+        <label><input type="checkbox" id="subset"> 字型子集化（內嵌完整字型時有效）</label>
+        <label><input type="checkbox" id="meta"> 移除中繼資料</label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="use-target"> 指定目標大小：</label>
+        <input type="number" id="target-mb" value="5" min="0.1" step="0.5" style="width:80px"> MB
+        <span class="hint">（自動調整 DPI 與品質，會花較久時間）</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button class="btn primary" id="start">開始處理</button>
+        <button class="btn" id="download-all" disabled>全部下載</button>
+        <span class="hint">處理好的檔案會出現在「下載」資料夾。</span>
+      </div>
+      <progress id="progress" value="0" max="1"></progress>
+      <div class="status" id="status"></div>
+    </div>
+  </section>
+
+  <!-- ====================== 頁面編輯 ====================== -->
+  <section id="tab-pages" class="hidden">
+    <p class="hint" style="margin-top:0">把左邊的頁面拖到右邊即可合併；在右邊拖曳縮圖可調整順序。按住 Shift 或 Ctrl（Mac 為 ⌘）可多選。PDF 檔也可以直接拖進左右兩邊開啟。</p>
+    <div class="editor">
+      <div class="panel side" id="side-src">
+        <h2>來源 PDF（從這裡挑頁面）</h2>
+        <div class="row">
+          <label class="btn" for="src-input">開啟…</label>
+          <input id="src-input" type="file" accept=".pdf,application/pdf">
+          <span class="hint" id="src-name">尚未開啟</span>
+        </div>
+        <div class="row">
+          頁碼：<input type="text" id="range" placeholder="例如 2-4, 7" style="width:120px">
+          <button class="btn" id="range-select">選取</button>
+          <button class="btn" id="add-to-dst">加入右側 →</button>
+        </div>
+        <div class="grid" id="grid-src" tabindex="0"></div>
+      </div>
+      <div class="panel side" id="side-dst">
+        <h2>編輯中的 PDF（排序、刪除、旋轉）</h2>
+        <div class="row">
+          <label class="btn" for="dst-input">開啟…</label>
+          <input id="dst-input" type="file" accept=".pdf,application/pdf">
+          <button class="btn" id="dst-clear">清空</button>
+          <span class="hint" id="dst-name">空白（可直接從左邊拖頁面進來）</span>
+        </div>
+        <div class="row">
+          <button class="btn" id="rot-left">↺ 左轉</button>
+          <button class="btn" id="rot-right">↻ 右轉</button>
+          <button class="btn" id="del">刪除</button>
+          <button class="btn" id="undo">復原</button>
+          <button class="btn primary" id="save" style="margin-left:auto">下載 PDF</button>
+        </div>
+        <div class="grid" id="grid-dst" tabindex="0"></div>
+      </div>
+    </div>
+    <div class="status" id="pages-status"></div>
+  </section>
+</div>
+
+<script type="module">
+const MUPDF_URL = "https://cdn.jsdelivr.net/npm/mupdf@1.28.1/dist/mupdf.js";
+
+// ==CORE START==
+// 不依賴網頁介面的核心邏輯（與 Python 版 pdftool/core.py、pages.py 相同的做法）
+
+const PRESETS = {
+  "高品質（輕度壓縮）": { dpi: 200, quality: 85 },
+  "平衡（推薦）": { dpi: 150, quality: 70 },
+  "小檔案": { dpi: 110, quality: 55 },
+  "極限壓縮": { dpi: 72, quality: 35 },
+};
+const DEFAULT_PRESET = "平衡（推薦）";
+// 「目標大小」模式依序嘗試的 [DPI, 品質]，由高畫質到低畫質
+const TARGET_STEPS = [
+  [220, 85], [180, 80], [150, 72], [135, 65], [120, 58],
+  [105, 50], [96, 45], [85, 40], [72, 35], [60, 28], [50, 22],
+];
+const MIN_IMAGE_PIXELS = 64 * 64;
+const MIN_IMAGE_BYTES = 4 * 1024;
+const RESIZE_THRESHOLD = 0.9;
+const UNSAFE_COLORSPACES = ["Separation", "DeviceN", "Lab", "Pattern"];
+const SAVE_OPTIONS = "garbage=deduplicate,compress,compress-images,compress-fonts,objstms";
+
+class PdfPasswordError extends Error {
+  constructor(kind) {
+    super(kind === "wrong" ? "密碼錯誤" : "此 PDF 需要開啟密碼");
+    this.kind = kind;
+  }
+}
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function humanSize(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function toBytes(buffer) {
+  // 複製一份，避免 WebAssembly 記憶體釋放後失效
+  return new Uint8Array(buffer.asUint8Array());
+}
+
+function openPdf(mupdf, data, password = "") {
+  let doc;
+  try {
+    doc = new mupdf.PDFDocument(data);
+  } catch (e) {
+    throw new Error("無法開啟，可能不是有效的 PDF 檔案");
+  }
+  if (doc.needsPassword()) {
+    if (!password) { doc.destroy(); throw new PdfPasswordError("required"); }
+    if (!doc.authenticatePassword(password)) { doc.destroy(); throw new PdfPasswordError("wrong"); }
+  }
+  return doc;
+}
+
+function isEncrypted(doc) {
+  const enc = doc.getMetaData("encryption");
+  return !!enc && enc !== "None";
+}
+
+function readInfo(mupdf, data) {
+  let doc;
+  try {
+    doc = new mupdf.PDFDocument(data);
+  } catch (e) {
+    return { error: "無法開啟，可能不是有效的 PDF 檔案" };
+  }
+  try {
+    const needsPass = doc.needsPassword();
+    return { needsPass, encrypted: needsPass || isEncrypted(doc), pages: needsPass ? null : doc.countPages() };
+  } finally {
+    doc.destroy();
+  }
+}
+
+function checkPassword(mupdf, data, password) {
+  try { openPdf(mupdf, data, password).destroy(); return true; } catch (e) { return false; }
+}
+
+// ---------------------------------------------------------------- 圖片重新壓縮
+
+function collectImageXObjects(res, out, seen) {
+  if (!res || res.isNull()) return;
+  const xobjects = res.get("XObject");
+  if (!xobjects || xobjects.isNull()) return;
+  xobjects.forEach((val) => {
+    if (!val.isIndirect()) return;
+    const num = val.asIndirect();
+    if (seen.has(num)) return;
+    seen.add(num);
+    const subtype = val.get("Subtype");
+    const name = subtype.isName() ? subtype.asName() : "";
+    if (name === "Image") out.set(num, val);
+    else if (name === "Form") collectImageXObjects(val.get("Resources"), out, seen);
+  });
+}
+
+/** 回傳 { images: Map<xref, obj>, display: Map<xref,[寬pt,高pt]>, pageMax: Map<xref, 頁面最長邊pt> } */
+function collectImages(mupdf, doc) {
+  const images = new Map(), display = new Map(), pageMax = new Map();
+  const n = doc.countPages();
+  for (let i = 0; i < n; i++) {
+    const page = doc.loadPage(i);
+    const [x0, y0, x1, y1] = page.getBounds();
+    const longest = Math.max(x1 - x0, y1 - y0);
+    const onPage = new Map();
+    collectImageXObjects(page.getObject().getInheritable("Resources"), onPage, new Set());
+
+    // 以「像素尺寸」對應出每張圖在頁面上實際顯示的大小（已考慮旋轉）
+    const shown = new Map();
+    const device = new mupdf.Device({
+      fillImage(image, ctm) {
+        const key = `${image.getWidth()}x${image.getHeight()}`;
+        const dx = Math.hypot(ctm[0], ctm[1]), dy = Math.hypot(ctm[2], ctm[3]);
+        const [ox, oy] = shown.get(key) || [0, 0];
+        shown.set(key, [Math.max(ox, dx), Math.max(oy, dy)]);
+      },
+    });
+    try { page.run(device, mupdf.Matrix.identity); } catch (e) { /* 無法解析的頁面就略過 */ }
+    device.close();
+
+    for (const [xref, obj] of onPage) {
+      images.set(xref, obj);
+      pageMax.set(xref, Math.max(pageMax.get(xref) || 0, longest));
+      const key = `${obj.get("Width").asNumber()}x${obj.get("Height").asNumber()}`;
+      const d = shown.get(key);
+      if (d) {
+        const [ox, oy] = display.get(xref) || [0, 0];
+        display.set(xref, [Math.max(ox, d[0]), Math.max(oy, d[1])]);
+      }
+    }
+  }
+  return { images, display, pageMax };
+}
+
+function colorspaceIsSafe(obj) {
+  const cs = obj.get("ColorSpace");
+  if (cs.isNull()) return true;
+  let text = cs.toString();
+  if (cs.isArray()) cs.forEach((v) => { text += " " + v.resolve().toString(); });
+  return !UNSAFE_COLORSPACES.some((name) => text.includes(name));
+}
+
+/** 每個目標像素對應到的來源像素與權重（區域平均） */
+function boxWeights(srcLen, dstLen) {
+  const scale = srcLen / dstLen, list = [];
+  for (let d = 0; d < dstLen; d++) {
+    const a = d * scale, b = a + scale, idx = [], wts = [];
+    for (let s = Math.floor(a); s < Math.min(srcLen, Math.ceil(b)); s++) {
+      idx.push(s);
+      wts.push((Math.min(s + 1, b) - Math.max(s, a)) / scale);
+    }
+    list.push([idx, wts]);
+  }
+  return list;
+}
+
+/** 以區域平均縮小圖片（MuPDF 的 warp 是點取樣，縮小時會產生條紋） */
+function resizePixmap(mupdf, pix, w, h) {
+  const sw = pix.getWidth(), sh = pix.getHeight(), n = pix.getNumberOfComponents(), stride = pix.getStride();
+  const src = pix.getPixels().slice();
+  const wx = boxWeights(sw, w), wy = boxWeights(sh, h);
+  const tmp = new Float32Array(w * sh * n);  // 先水平縮
+  for (let y = 0; y < sh; y++) {
+    const row = y * stride, out = y * w * n;
+    for (let x = 0; x < w; x++) {
+      const [idx, wts] = wx[x];
+      for (let c = 0; c < n; c++) {
+        let acc = 0;
+        for (let k = 0; k < idx.length; k++) acc += src[row + idx[k] * n + c] * wts[k];
+        tmp[out + x * n + c] = acc;
+      }
+    }
+  }
+  const result = new mupdf.Pixmap(pix.getColorSpace(), [0, 0, w, h], false);
+  const dstride = result.getStride();
+  const buf = new Uint8ClampedArray(dstride * h);  // 再垂直縮
+  for (let y = 0; y < h; y++) {
+    const [idx, wts] = wy[y];
+    for (let i = 0; i < w * n; i++) {
+      let acc = 0;
+      for (let k = 0; k < idx.length; k++) acc += tmp[idx[k] * w * n + i] * wts[k];
+      buf[y * dstride + i] = acc + 0.5;
+    }
+  }
+  result.getPixels().set(buf);
+  return result;
+}
+
+/** 重新壓縮單張圖片；回傳節省的位元組數（0 表示未變更） */
+function recompressImage(mupdf, doc, obj, display, pageMaxPt, opts) {
+  const get = (k) => obj.get(k);
+  if (!get("Subtype").isName() || get("Subtype").asName() !== "Image") return 0;
+  if (get("ImageMask").isBoolean() && get("ImageMask").asBoolean()) return 0;
+  if (get("BitsPerComponent").isNumber() && get("BitsPerComponent").asNumber() === 1) return 0;
+  const filter = get("Filter").toString();
+  if (/JBIG2Decode|CCITTFaxDecode/.test(filter)) return 0;
+  if (/JPXDecode/.test(filter) && !get("SMaskInData").isNull()) return 0;
+  if (!colorspaceIsSafe(obj)) return 0;
+
+  const origLen = obj.readRawStream().getLength();
+  if (origLen < MIN_IMAGE_BYTES) return 0;
+
+  let pix = doc.loadImage(obj).toPixmap();
+  if (!pix.getColorSpace() || pix.getWidth() * pix.getHeight() < MIN_IMAGE_PIXELS) return 0;
+  const gray = opts.grayscale || pix.getNumberOfComponents() - pix.getAlpha() === 1;
+  // 一律轉成 DeviceGray / DeviceRGB：MuPDF 遇到 ICC 灰階會輸出 3 色 JPEG，與宣告的灰階不符而出現條紋
+  pix = pix.convertToColorSpace(gray ? mupdf.ColorSpace.DeviceGray : mupdf.ColorSpace.DeviceRGB, false);
+
+  let w = pix.getWidth(), h = pix.getHeight();
+  let scale;
+  if (display && display[0] >= 1 && display[1] >= 1) {
+    scale = Math.max(display[0] / 72 * opts.dpi / w, display[1] / 72 * opts.dpi / h);
+  } else {  // 找不到顯示位置時，以頁面大小為上限
+    scale = (pageMaxPt / 72 * opts.dpi) / Math.max(w, h);
+  }
+  if (scale < RESIZE_THRESHOLD) {
+    w = Math.max(1, Math.round(w * scale));
+    h = Math.max(1, Math.round(h * scale));
+    pix = resizePixmap(mupdf, pix, w, h);
+  }
+
+  const jpeg = pix.asJPEG(opts.quality, false);
+  if (jpeg.length >= origLen) return 0;
+
+  obj.writeRawStream(jpeg);
+  obj.put("Filter", doc.newName("DCTDecode"));
+  obj.put("Width", w);
+  obj.put("Height", h);
+  obj.put("ColorSpace", doc.newName(gray ? "DeviceGray" : "DeviceRGB"));
+  obj.put("BitsPerComponent", 8);
+  obj.delete("DecodeParms");
+  obj.delete("Decode");
+  obj.delete("SMaskInData");
+  if (get("Mask").isArray()) obj.delete("Mask");  // 色鍵遮罩依賴原色彩空間
+  return origLen - jpeg.length;
+}
+
+/** 就地壓縮已開啟的文件；回傳被重新壓縮的圖片數 */
+async function compressDoc(mupdf, doc, opts, progress = () => {}) {
+  progress(0, "分析圖片…");
+  await tick();
+  const { images, display, pageMax } = collectImages(mupdf, doc);
+  let i = 0, changed = 0;
+  for (const [xref, obj] of images) {
+    i++;
+    try {
+      if (recompressImage(mupdf, doc, obj, display.get(xref), pageMax.get(xref), opts)) changed++;
+    } catch (e) { /* 單張圖片失敗就保留原圖 */ }
+    progress(0.9 * i / images.size, `壓縮圖片 ${i}/${images.size}`);
+    await tick();
+  }
+  if (opts.subsetFonts) {
+    progress(0.92, "字型子集化…");
+    await tick();
+    try { doc.subsetFonts(); } catch (e) { /* 失敗就保留原字型 */ }
+  }
+  if (opts.removeMetadata) {
+    doc.getTrailer().delete("Info");
+    doc.getTrailer().get("Root").delete("Metadata");
+  }
+  progress(0.95, "寫入檔案…");
+  await tick();
+  return changed;
+}
+
+function saveOptions(decrypt) {
+  return decrypt ? SAVE_OPTIONS + ",encrypt=none" : SAVE_OPTIONS;
+}
+
+async function unlockPdf(mupdf, data, password, progress = () => {}) {
+  progress(0.2, "移除加密…");
+  await tick();
+  const doc = openPdf(mupdf, data, password);
+  try {
+    if (!isEncrypted(doc)) return { bytes: null, skipped: true, message: "檔案沒有加密，不需解鎖" };
+    const bytes = toBytes(doc.saveToBuffer("encrypt=none,garbage=compact,compress"));
+    progress(1, "完成");
+    return { bytes, message: "已移除密碼與限制" };
+  } finally {
+    doc.destroy();
+  }
+}
+
+async function compressPdf(mupdf, data, opts, { password = "", decrypt = false, progress = () => {} } = {}) {
+  const doc = openPdf(mupdf, data, password);
+  let bytes, changed, wasEncrypted;
+  try {
+    wasEncrypted = isEncrypted(doc);
+    changed = await compressDoc(mupdf, doc, opts, progress);
+    bytes = toBytes(doc.saveToBuffer(saveOptions(decrypt)));
+  } finally {
+    doc.destroy();
+  }
+  progress(1, "完成");
+  if (bytes.length >= data.length && !decrypt) {
+    return { bytes: data, message: "原檔已相當精簡，無法再縮小（已保留原內容）" };
+  }
+  let message = `重新壓縮 ${changed} 張圖片（${opts.dpi} DPI、品質 ${opts.quality}）`;
+  if (decrypt && wasEncrypted) message += "，並移除加密";
+  return { bytes, message };
+}
+
+/** 自動尋找能小於目標大小、且畫質最好的 DPI/品質組合（二分搜尋） */
+async function compressToTarget(mupdf, data, targetBytes, base, { password = "", decrypt = false, progress = () => {} } = {}) {
+  if (data.length <= targetBytes && !decrypt) {
+    progress(1, "完成");
+    return { bytes: data, message: "原檔已小於目標大小，未做壓縮" };
+  }
+  const cache = new Map();
+  const maxAttempts = Math.ceil(Math.log2(TARGET_STEPS.length)) + 1;
+  let attempts = 0;
+
+  async function attempt(i) {
+    if (!cache.has(i)) {
+      const [dpi, quality] = TARGET_STEPS[i];
+      const baseF = Math.min(attempts / maxAttempts, 0.95), span = 0.95 / maxAttempts;
+      const doc = openPdf(mupdf, data, password);
+      try {
+        await compressDoc(mupdf, doc, { ...base, dpi, quality },
+          (f, t) => progress(baseF + span * f, `嘗試 ${dpi} DPI / 品質 ${quality}：${t}`));
+        cache.set(i, toBytes(doc.saveToBuffer(saveOptions(decrypt))));
+      } finally {
+        doc.destroy();
+      }
+      attempts++;
+    }
+    return cache.get(i);
+  }
+
+  let lo = 0, hi = TARGET_STEPS.length - 1, best = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if ((await attempt(mid)).length <= targetBytes) { best = mid; hi = mid - 1; } else { lo = mid + 1; }
+  }
+  const reached = best !== null;
+  if (!reached) best = [...cache.keys()].reduce((a, b) => (cache.get(a).length <= cache.get(b).length ? a : b));
+  const bytes = cache.get(best);
+  const [dpi, quality] = TARGET_STEPS[best];
+  progress(1, "完成");
+  if (bytes.length >= data.length && !decrypt) return { bytes: data, message: "無法再縮小（已保留原內容）" };
+  return {
+    bytes,
+    message: reached ? `使用 ${dpi} DPI、品質 ${quality}` : `無法達到目標大小，已採用最小結果（${dpi} DPI、品質 ${quality}）`,
+  };
+}
+
+async function processPdf(mupdf, data, { password = "", unlock = false, compress = null, targetBytes = 0, progress } = {}) {
+  if (!compress) {
+    if (!unlock) throw new Error("請至少選擇一項操作");
+    return unlockPdf(mupdf, data, password, progress);
+  }
+  if (targetBytes) return compressToTarget(mupdf, data, targetBytes, compress, { password, decrypt: unlock, progress });
+  return compressPdf(mupdf, data, compress, { password, decrypt: unlock, progress });
+}
+
+// ---------------------------------------------------------------- 頁面編輯
+
+/** 把「1-3, 5, 8-」轉成 0 起算的頁碼清單（依輸入順序、去除重複） */
+function parsePageRanges(text, count) {
+  const result = [], seen = new Set();
+  for (const part of text.trim().split(/[,，、\s]+/)) {
+    if (!part) continue;
+    const m = part.match(/^(\d*)[-~－～](\d*)$|^(\d+)$/);
+    if (!m) throw new Error(`看不懂的頁碼：${part}`);
+    let start, end;
+    if (m[3]) { start = end = parseInt(m[3], 10); }
+    else { start = m[1] ? parseInt(m[1], 10) : 1; end = m[2] ? parseInt(m[2], 10) : count; }
+    if (!(start >= 1 && start <= count && end >= 1 && end <= count)) throw new Error(`頁碼超出範圍（1–${count}）：${part}`);
+    const step = end >= start ? 1 : -1;
+    for (let p = start; p !== end + step; p += step) {
+      if (!seen.has(p)) { seen.add(p); result.push(p - 1); }
+    }
+  }
+  return result;
+}
+
+/** 把一頁算繪成不超過 maxW × maxH 的 PNG */
+function renderThumbnail(mupdf, doc, index, maxW, maxH) {
+  const page = doc.loadPage(index);
+  const [x0, y0, x1, y1] = page.getBounds();
+  const zoom = Math.min(maxW / (x1 - x0), maxH / (y1 - y0));
+  return page.toPixmap(mupdf.Matrix.scale(zoom, zoom), mupdf.ColorSpace.DeviceRGB, false).asPNG();
+}
+
+/**
+ * 依 refs 的順序組出新的 PDF（可來自多個檔案、可重複、可旋轉）。
+ * refs: [{ doc: 已開啟的 PDFDocument, index: 0 起算, rotation: 額外順時針角度 }]
+ */
+function buildPdf(mupdf, refs) {
+  if (!refs.length) throw new Error("沒有任何頁面可以儲存");
+  const out = new mupdf.PDFDocument();
+  const maps = new Map();  // 每個來源檔共用一個 graft map，重複的字型、圖片只複製一次
+  try {
+    for (const ref of refs) {
+      if (!maps.has(ref.doc)) maps.set(ref.doc, out.newGraftMap());
+      maps.get(ref.doc).graftPage(-1, ref.doc, ref.index);
+      if (ref.rotation) {
+        const page = out.findPage(out.countPages() - 1);
+        const rotate = page.getInheritable("Rotate");
+        const base = rotate.isNumber() ? rotate.asNumber() : 0;
+        page.put("Rotate", (((base + ref.rotation) % 360) + 360) % 360);
+      }
+    }
+    return toBytes(out.saveToBuffer("garbage=compact,compress"));
+  } finally {
+    out.destroy();
+  }
+}
+// ==CORE END==
+
+// ====================================================================== 介面
+
+const $ = (sel) => document.querySelector(sel);
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+let mupdf = null;
+const engineReady = import(MUPDF_URL).then((m) => {
+  mupdf = m;
+  $("#engine").textContent = "PDF 引擎已就緒";
+  return m;
+}).catch((e) => {
+  $("#engine").textContent = "無法載入 PDF 引擎，請確認網路連線後重新整理頁面";
+  $("#engine").classList.add("err");
+  throw e;
+});
+
+function downloadBytes(bytes, filename) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function stem(name) { return name.replace(/\.pdf$/i, ""); }
+
+function readFile(file) {
+  return file.arrayBuffer().then((b) => new Uint8Array(b));
+}
+
+// 分頁切換
+document.querySelectorAll(".tabs button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b === btn));
+    $("#tab-compress").classList.toggle("hidden", btn.dataset.tab !== "compress");
+    $("#tab-pages").classList.toggle("hidden", btn.dataset.tab !== "pages");
+  });
+});
+
+// ------------------------------------------------------------ 解鎖 / 壓縮
+const files = [];  // { file, data, info, row, pwInput, statusCell, linkCell, result }
+let busy = false;
+
+for (const name of Object.keys(PRESETS)) $("#preset").add(new Option(name, name, false, name === DEFAULT_PRESET));
+$("#preset").add(new Option("自訂", "custom"));
+function applyPreset() {
+  const p = PRESETS[$("#preset").value];
+  if (!p) return;
+  $("#dpi").value = p.dpi;
+  $("#quality").value = p.quality;
+  updateSliderLabels();
+}
+function updateSliderLabels() {
+  $("#dpi-val").textContent = `${$("#dpi").value} DPI`;
+  $("#quality-val").textContent = $("#quality").value;
+}
+$("#preset").addEventListener("change", applyPreset);
+for (const id of ["#dpi", "#quality"]) {
+  $(id).addEventListener("input", () => { $("#preset").value = "custom"; updateSliderLabels(); });
+}
+applyPreset();
+
+function updateCompressState() {
+  const on = $("#op-compress").checked;
+  $("#compress-settings").style.opacity = on ? 1 : 0.45;
+  $("#compress-settings").querySelectorAll("input, select").forEach((el) => { el.disabled = !on || busy; });
+  if (on && !busy) {
+    const target = $("#use-target").checked;
+    $("#target-mb").disabled = !target;
+    for (const id of ["#preset", "#dpi", "#quality"]) $(id).disabled = target;
+  }
+  $("#start").disabled = busy;
+}
+for (const id of ["#op-compress", "#use-target"]) $(id).addEventListener("change", updateCompressState);
+updateCompressState();
+
+async function addFiles(list) {
+  const pdfs = [...list].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  if (!pdfs.length) return;
+  const m = await engineReady;
+  for (const file of pdfs) {
+    if (files.some((f) => f.file.name === file.name && f.file.size === file.size)) continue;
+    const data = await readFile(file);
+    const info = readInfo(m, data);
+    const row = document.createElement("tr");
+    const lock = info.error ? "-" : info.needsPass ? "需密碼" : info.encrypted ? "有限制" : "無";
+    row.innerHTML = `<td></td><td class="num">${info.pages ?? "?"}</td><td class="num">${humanSize(file.size)}</td>
+      <td>${lock}</td><td class="st"></td><td class="lk"></td>`;
+    row.cells[0].textContent = file.name;
+    const entry = { file, data, info, row, statusCell: row.querySelector(".st"), linkCell: row.querySelector(".lk") };
+    if (info.error) {
+      entry.statusCell.innerHTML = `<span class="err"></span>`;
+      entry.statusCell.firstChild.textContent = info.error;
+    } else if (info.needsPass) {
+      entry.pwInput = document.createElement("input");
+      entry.pwInput.type = "password";
+      entry.pwInput.className = "pw";
+      entry.pwInput.placeholder = "此檔密碼";
+      entry.statusCell.append(entry.pwInput);
+    } else {
+      entry.statusCell.textContent = "等待中";
+    }
+    $("#file-table tbody").append(row);
+    files.push(entry);
+  }
+  $("#file-table").classList.toggle("hidden", !files.length);
+  $("#status").textContent = `共 ${files.length} 個檔案`;
+}
+
+$("#file-input").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+const drop = $("#drop");
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); });
+$("#clear-files").addEventListener("click", () => {
+  if (busy) return;
+  files.length = 0;
+  $("#file-table tbody").innerHTML = "";
+  $("#file-table").classList.add("hidden");
+  $("#download-all").disabled = true;
+  $("#status").textContent = "";
+});
+
+function setStatus(entry, text, cls = "") {
+  entry.statusCell.innerHTML = "";
+  const span = document.createElement("span");
+  span.className = cls;
+  span.textContent = text;
+  entry.statusCell.append(span);
+  if (entry.pwInput && cls === "err") entry.statusCell.append(" ", entry.pwInput);
+}
+
+$("#start").addEventListener("click", async () => {
+  if (busy) return;
+  const unlock = $("#op-unlock").checked, compress = $("#op-compress").checked;
+  if (!unlock && !compress) { alert("請至少勾選「解鎖」或「壓縮」其中一項。"); return; }
+  const jobs = files.filter((f) => !f.info.error);
+  if (!jobs.length) { alert("請先加入可讀取的 PDF 檔案。"); return; }
+  let opts = null, targetBytes = 0;
+  if (compress) {
+    opts = { dpi: +$("#dpi").value, quality: +$("#quality").value, grayscale: $("#gray").checked,
+             subsetFonts: $("#subset").checked, removeMetadata: $("#meta").checked };
+    if ($("#use-target").checked) {
+      const mb = parseFloat($("#target-mb").value);
+      if (!(mb > 0)) { alert("目標大小必須大於 0"); return; }
+      targetBytes = Math.round(mb * 1024 * 1024);
+    }
+  }
+  // 先標記處理中再等引擎，避免等待期間被重複按下
+  busy = true;
+  updateCompressState();
+  $("#download-all").disabled = true;
+  $("#progress").value = 0;
+  $("#status").textContent = "準備中…";
+  let m;
+  try {
+    m = await engineReady;
+  } catch (e) {
+    busy = false;
+    updateCompressState();
+    $("#status").textContent = "PDF 引擎無法載入，請確認網路連線後重新整理頁面";
+    return;
+  }
+  const suffix = unlock && compress ? "_unlocked_compressed" : unlock ? "_unlocked" : "_compressed";
+  let before = 0, after = 0;
+  for (const [idx, entry] of jobs.entries()) {
+    entry.result = null;
+    entry.linkCell.innerHTML = "";
+    const password = entry.pwInput?.value || $("#password").value;
+    if (entry.info.needsPass && !checkPassword(m, entry.data, password)) {
+      setStatus(entry, password ? "密碼錯誤，請在右側輸入此檔密碼：" : "需要密碼，請在右側輸入：", "err");
+      entry.pwInput?.focus();
+      continue;
+    }
+    const progress = (f, text) => {
+      $("#progress").value = (idx + f) / jobs.length;
+      $("#status").textContent = `${entry.file.name}：${text}`;
+      setStatus(entry, text);
+    };
+    try {
+      const r = await processPdf(m, entry.data, { password, unlock, compress: opts, targetBytes, progress });
+      if (r.skipped) { setStatus(entry, `略過：${r.message}`); continue; }
+      const ratio = 1 - r.bytes.length / entry.data.length;
+      const change = `${humanSize(entry.data.length)} → ${humanSize(r.bytes.length)}` +
+        (ratio > 0 ? `（-${(ratio * 100).toFixed(1)}%）` : "");
+      setStatus(entry, `✓ ${change}　${r.message}`, "ok");
+      entry.result = { bytes: r.bytes, name: `${stem(entry.file.name)}${suffix}.pdf` };
+      const a = document.createElement("a");
+      a.href = "#";
+      a.className = "dl";
+      a.textContent = "下載";
+      a.addEventListener("click", (e) => { e.preventDefault(); downloadBytes(entry.result.bytes, entry.result.name); });
+      entry.linkCell.append(a);
+      before += entry.data.length;
+      after += r.bytes.length;
+    } catch (e) {
+      setStatus(entry, `✗ 失敗：${e.message || e}`, "err");
+    }
+    await tick();
+  }
+  busy = false;
+  updateCompressState();
+  $("#progress").value = 1;
+  $("#status").textContent = before ? `處理完成：合計 ${humanSize(before)} → ${humanSize(after)}，按「下載」取得檔案` : "處理完成";
+  $("#download-all").disabled = !files.some((f) => f.result);
+});
+
+$("#download-all").addEventListener("click", async () => {
+  for (const f of files) {
+    if (!f.result) continue;
+    downloadBytes(f.result.bytes, f.result.name);
+    await new Promise((r) => setTimeout(r, 400));  // 間隔一下，避免瀏覽器擋下多個下載
+  }
+});
+
+// ------------------------------------------------------------ 頁面編輯
+const THUMB_W = 110, THUMB_H = 150;
+const sources = new Map();    // id -> { name, data, doc, password }
+let nextSourceId = 1;
+const thumbCache = new Map(); // "id:index" -> blob URL
+const renderQueue = [];
+let rendering = false;
+
+const panels = {
+  src: { grid: $("#grid-src"), items: [], selected: new Set(), anchor: null,
+         empty: "按「開啟…」或把 PDF 拖到這裡\n選擇要從中挑選頁面的 PDF（例如 A.pdf）" },
+  dst: { grid: $("#grid-dst"), items: [], selected: new Set(), anchor: null,
+         empty: "按「開啟…」或把 PDF 拖到這裡（例如 B.pdf）\n也可以直接把左邊的頁面拖進來" },
+};
+let srcSourceId = null, dstBaseName = null, dirty = false;
+const undoStack = [];
+let drag = null;  // { from: "src"|"dst", indices: [] }
+
+function pagesStatus(text) { $("#pages-status").textContent = text; }
+
+async function openSource(file) {
+  const m = await engineReady;
+  const data = await readFile(file);
+  let password = "", doc;
+  for (;;) {
+    try {
+      doc = openPdf(m, data, password);
+      break;
+    } catch (e) {
+      if (!(e instanceof PdfPasswordError)) { alert(`${file.name}：${e.message}`); return null; }
+      password = prompt(`「${file.name}」${e.kind === "wrong" ? "密碼錯誤，請重新輸入" : "需要開啟密碼"}：`);
+      if (password === null) return null;
+    }
+  }
+  const id = nextSourceId++;
+  sources.set(id, { name: file.name, data, doc, password });
+  return { id, count: doc.countPages() };
+}
+
+function queueThumb(item, img) {
+  const key = `${item.src}:${item.index}`;
+  if (thumbCache.has(key)) { img.src = thumbCache.get(key); return; }
+  renderQueue.push({ key, item, img });
+  if (!rendering) drainQueue();
+}
+
+async function drainQueue() {
+  rendering = true;
+  while (renderQueue.length) {
+    const { key, item, img } = renderQueue.shift();
+    if (!img.isConnected) continue;
+    if (!thumbCache.has(key)) {
+      try {
+        const png = renderThumbnail(mupdf, sources.get(item.src).doc, item.index, THUMB_W, THUMB_H);
+        thumbCache.set(key, URL.createObjectURL(new Blob([png], { type: "image/png" })));
+      } catch (e) {
+        thumbCache.set(key, "");
+      }
+    }
+    if (thumbCache.get(key)) img.src = thumbCache.get(key);
+    await tick();
+  }
+  rendering = false;
+}
+
+const observer = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    observer.unobserve(entry.target);
+    const { panel, i } = entry.target.dataset;
+    const item = panels[panel].items[+i];
+    if (item) queueThumb(item, entry.target);
+  }
+}, { rootMargin: "300px" });
+
+function render(name) {
+  const p = panels[name];
+  const grid = p.grid;
+  const scroll = grid.scrollTop;
+  grid.querySelectorAll("img").forEach((img) => observer.unobserve(img));
+  grid.innerHTML = "";
+  grid.classList.remove("ins-end");
+  if (!p.items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = p.empty;
+    grid.append(empty);
+  }
+  const multiSource = name === "dst";
+  p.items.forEach((item, i) => {
+    const cell = document.createElement("div");
+    cell.className = "cell" + (p.selected.has(i) ? " sel" : "");
+    cell.draggable = true;
+    cell.dataset.i = i;
+    const box = document.createElement("div");
+    box.className = "imgbox";
+    const img = document.createElement("img");
+    img.alt = "";
+    img.dataset.panel = name;
+    img.dataset.i = i;
+    if (item.rotation) {
+      img.style.transform = `rotate(${item.rotation}deg)`;
+      img.classList.add(`r${item.rotation}`);
+    }
+    const key = `${item.src}:${item.index}`;
+    if (thumbCache.get(key)) img.src = thumbCache.get(key);
+    else observer.observe(img);
+    box.append(img);
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = `第 ${i + 1} 頁` + (item.rotation ? `  ↻${item.rotation}°` : "");
+    cell.append(box, cap);
+    if (multiSource) {
+      const src = document.createElement("div");
+      src.className = "src";
+      src.textContent = `${stem(sources.get(item.src).name)} p.${item.index + 1}`;
+      cell.append(src);
+    }
+    grid.append(cell);
+  });
+  grid.scrollTop = scroll;
+  if (name === "dst") updateDstLabel();
+}
+
+function updateDstLabel() {
+  const n = panels.dst.items.length;
+  const name = dstBaseName || (n ? "新文件" : "");
+  $("#dst-name").textContent = n || dstBaseName ? `${name}　${n} 頁${dirty ? "（未下載）" : ""}` : "空白（可直接從左邊拖頁面進來）";
+}
+
+/** 只更新選取樣式，不重建元素（重建會中斷拖曳、雙擊） */
+function updateSelection(name) {
+  const p = panels[name];
+  p.grid.querySelectorAll(".cell").forEach((c) => c.classList.toggle("sel", p.selected.has(+c.dataset.i)));
+}
+
+function cellIndex(target) {
+  const cell = target.closest(".cell");
+  return cell ? +cell.dataset.i : null;
+}
+
+function clickSelect(name, i, e) {
+  const p = panels[name];
+  if (e.shiftKey && p.anchor !== null) {
+    const [lo, hi] = [Math.min(p.anchor, i), Math.max(p.anchor, i)];
+    p.selected = new Set(Array.from({ length: hi - lo + 1 }, (_, k) => lo + k));
+  } else if (isMac ? e.metaKey : e.ctrlKey) {
+    p.selected.has(i) ? p.selected.delete(i) : p.selected.add(i);
+    p.anchor = i;
+  } else {
+    p.selected = new Set([i]);
+    p.anchor = i;
+  }
+  updateSelection(name);
+}
+
+function pushUndo() {
+  undoStack.push({ items: panels.dst.items.map((x) => ({ ...x })), selected: new Set(panels.dst.selected) });
+  if (undoStack.length > 50) undoStack.shift();
+}
+
+function changed(message) {
+  dirty = true;
+  render("dst");
+  pagesStatus(message);
+}
+
+function insertPages(items, idx) {
+  if (!items.length) return;
+  pushUndo();
+  panels.dst.items.splice(idx, 0, ...items.map((x) => ({ ...x })));
+  panels.dst.selected = new Set(items.map((_, k) => idx + k));
+  panels.dst.anchor = idx;
+  changed(`已加入 ${items.length} 頁到第 ${idx + 1} 頁的位置`);
+}
+
+function movePages(indices, idx) {
+  const chosen = new Set(indices);
+  const moving = panels.dst.items.filter((_, i) => chosen.has(i));
+  const rest = panels.dst.items.filter((_, i) => !chosen.has(i));
+  const newIdx = idx - indices.filter((i) => i < idx).length;
+  const next = [...rest.slice(0, newIdx), ...moving, ...rest.slice(newIdx)];
+  if (next.every((x, i) => x === panels.dst.items[i])) return;
+  pushUndo();
+  panels.dst.items = next;
+  panels.dst.selected = new Set(moving.map((_, k) => newIdx + k));
+  panels.dst.anchor = newIdx;
+  changed(`已移動 ${moving.length} 頁`);
+}
+
+/** 依滑鼠位置算出要插入的位置 */
+function insertIndexAt(e) {
+  const cells = [...panels.dst.grid.querySelectorAll(".cell")];
+  for (const [i, cell] of cells.entries()) {
+    const r = cell.getBoundingClientRect();
+    if (e.clientY < r.top) return i;  // 在這一列上方的空隙
+    if (e.clientY <= r.bottom && e.clientX < r.left + r.width / 2) return i;
+  }
+  return cells.length;
+}
+
+function showMarker(idx) {
+  const grid = panels.dst.grid;
+  grid.querySelectorAll(".ins-before, .ins-after").forEach((c) => c.classList.remove("ins-before", "ins-after"));
+  grid.classList.remove("ins-end");
+  if (idx === null) return;
+  const cells = grid.querySelectorAll(".cell");
+  if (idx < cells.length) cells[idx].classList.add("ins-before");
+  else if (cells.length) cells[cells.length - 1].classList.add("ins-after");
+}
+
+for (const name of ["src", "dst"]) {
+  const grid = panels[name].grid;
+  grid.addEventListener("click", (e) => {
+    const i = cellIndex(e.target);
+    if (i === null) { panels[name].selected.clear(); updateSelection(name); return; }
+    clickSelect(name, i, e);
+  });
+  grid.addEventListener("dragstart", (e) => {
+    const i = cellIndex(e.target);
+    if (i === null) return;
+    const p = panels[name];
+    if (!p.selected.has(i)) { p.selected = new Set([i]); p.anchor = i; updateSelection(name); }
+    drag = { from: name, indices: [...p.selected].sort((a, b) => a - b) };
+    e.dataTransfer.effectAllowed = name === "src" ? "copy" : "move";
+    e.dataTransfer.setData("text/plain", `${drag.indices.length} pages`);
+    pagesStatus(`拖曳 ${drag.indices.length} 頁…放到右邊想要的位置`);
+  });
+  grid.addEventListener("dragend", () => { drag = null; showMarker(null); grid.classList.remove("over"); });
+  grid.addEventListener("keydown", (e) => {
+    const mod = isMac ? e.metaKey : e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      panels[name].selected = new Set(panels[name].items.map((_, i) => i));
+      updateSelection(name);
+    } else if (mod && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      undo();
+    } else if (name === "dst" && (e.key === "Delete" || e.key === "Backspace")) {
+      e.preventDefault();
+      deleteSelected();
+    }
+  });
+  // 從桌面拖 PDF 檔進來開啟
+  grid.addEventListener("dragover", (e) => {
+    if (drag && name === "dst") {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = drag.from === "src" ? "copy" : "move";
+      showMarker(insertIndexAt(e));
+    } else if (!drag && e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      grid.classList.add("over");
+    }
+  });
+  grid.addEventListener("dragleave", (e) => {
+    if (!grid.contains(e.relatedTarget)) { showMarker(null); grid.classList.remove("over"); }
+  });
+  grid.addEventListener("drop", (e) => {
+    e.preventDefault();
+    grid.classList.remove("over");
+    if (drag && name === "dst") {
+      const idx = insertIndexAt(e);
+      showMarker(null);
+      if (drag.from === "src") insertPages(drag.indices.map((i) => panels.src.items[i]), idx);
+      else movePages(drag.indices, idx);
+      drag = null;
+    } else if (!drag && e.dataTransfer.files.length) {
+      const file = [...e.dataTransfer.files].find((f) => /\.pdf$/i.test(f.name));
+      if (file) (name === "src" ? loadSrc : loadDst)(file);
+    }
+  });
+}
+
+panels.src.grid.addEventListener("dblclick", (e) => {
+  const i = cellIndex(e.target);
+  if (i !== null) insertPages([panels.src.items[i]], panels.dst.items.length);
+});
+
+async function loadSrc(file) {
+  const opened = await openSource(file);
+  if (!opened) return;
+  srcSourceId = opened.id;
+  panels.src.items = Array.from({ length: opened.count }, (_, i) => ({ src: opened.id, index: i, rotation: 0 }));
+  panels.src.selected.clear();
+  panels.src.anchor = null;
+  panels.src.grid.scrollTop = 0;
+  render("src");
+  $("#src-name").textContent = `${file.name}　${opened.count} 頁`;
+  pagesStatus("在左邊點選頁面後拖到右邊，或雙擊頁面加到最後。");
+}
+
+function confirmDiscard() {
+  return !dirty || confirm("右邊的編輯尚未下載，確定要放棄嗎？");
+}
+
+async function loadDst(file) {
+  if (!confirmDiscard()) return;
+  const opened = await openSource(file);
+  if (!opened) return;
+  panels.dst.items = Array.from({ length: opened.count }, (_, i) => ({ src: opened.id, index: i, rotation: 0 }));
+  panels.dst.selected.clear();
+  panels.dst.anchor = null;
+  panels.dst.grid.scrollTop = 0;
+  dstBaseName = file.name;
+  dirty = false;
+  undoStack.length = 0;
+  render("dst");
+}
+
+$("#src-input").addEventListener("change", (e) => { if (e.target.files[0]) loadSrc(e.target.files[0]); e.target.value = ""; });
+$("#dst-input").addEventListener("change", (e) => { if (e.target.files[0]) loadDst(e.target.files[0]); e.target.value = ""; });
+$("#dst-clear").addEventListener("click", () => {
+  if (!confirmDiscard()) return;
+  panels.dst.items = [];
+  panels.dst.selected.clear();
+  dstBaseName = null;
+  dirty = false;
+  undoStack.length = 0;
+  render("dst");
+});
+
+function deleteSelected() {
+  const p = panels.dst;
+  if (!p.selected.size) { pagesStatus("請先在右邊選取要刪除的頁面"); return; }
+  pushUndo();
+  const n = p.selected.size;
+  p.items = p.items.filter((_, i) => !p.selected.has(i));
+  p.selected.clear();
+  changed(`已刪除 ${n} 頁（可按「復原」）`);
+}
+
+function rotateSelected(delta) {
+  const p = panels.dst;
+  if (!p.selected.size) { pagesStatus("請先在右邊選取要旋轉的頁面"); return; }
+  pushUndo();
+  for (const i of p.selected) p.items[i] = { ...p.items[i], rotation: (p.items[i].rotation + delta + 360) % 360 };
+  changed(`已旋轉 ${p.selected.size} 頁`);
+}
+
+function undo() {
+  const prev = undoStack.pop();
+  if (!prev) { pagesStatus("沒有可以復原的動作"); return; }
+  panels.dst.items = prev.items;
+  panels.dst.selected = prev.selected;
+  changed("已復原");
+}
+
+let rangeOrder = [];
+$("#range-select").addEventListener("click", selectRange);
+$("#range").addEventListener("keydown", (e) => { if (e.key === "Enter") selectRange(); });
+function selectRange() {
+  if (!panels.src.items.length) { pagesStatus("請先在左邊開啟來源 PDF"); return; }
+  try {
+    rangeOrder = parsePageRanges($("#range").value, panels.src.items.length);
+  } catch (e) {
+    alert(`${e.message}\n\n範例：1-3, 5, 8-`);
+    return;
+  }
+  panels.src.selected = new Set(rangeOrder);
+  panels.src.anchor = rangeOrder[0] ?? null;
+  updateSelection("src");
+  panels.src.grid.querySelector(`.cell[data-i="${rangeOrder[0]}"]`)?.scrollIntoView({ block: "nearest" });
+  pagesStatus(`已選取 ${rangeOrder.length} 頁`);
+}
+$("#add-to-dst").addEventListener("click", () => {
+  const sel = panels.src.selected;
+  if (!sel.size) { pagesStatus("請先在左邊選取頁面（點選或輸入頁碼）"); return; }
+  const sameAsRange = rangeOrder.length === sel.size && rangeOrder.every((i) => sel.has(i));
+  const order = sameAsRange ? rangeOrder : [...sel].sort((a, b) => a - b);
+  // 右邊有選取時插在選取頁之後，否則加到最後
+  const idx = panels.dst.selected.size ? Math.max(...panels.dst.selected) + 1 : panels.dst.items.length;
+  insertPages(order.map((i) => panels.src.items[i]), idx);
+});
+
+$("#rot-left").addEventListener("click", () => rotateSelected(-90));
+$("#rot-right").addEventListener("click", () => rotateSelected(90));
+$("#del").addEventListener("click", deleteSelected);
+$("#undo").addEventListener("click", undo);
+$("#save").addEventListener("click", async () => {
+  if (!panels.dst.items.length) { alert("右邊還沒有任何頁面。"); return; }
+  const m = await engineReady;
+  pagesStatus("產生 PDF 中…");
+  await tick();
+  try {
+    const bytes = buildPdf(m, panels.dst.items.map((x) => ({ doc: sources.get(x.src).doc, index: x.index, rotation: x.rotation })));
+    const base = dstBaseName || sources.get(panels.dst.items[0].src).name;
+    downloadBytes(bytes, `${stem(base)}_edited.pdf`);
+    dirty = false;
+    updateDstLabel();
+    pagesStatus(`✓ 已下載 ${panels.dst.items.length} 頁（${humanSize(bytes.length)}）`);
+  } catch (e) {
+    alert(`產生失敗：${e.message || e}`);
+    pagesStatus("產生失敗");
+  }
+});
+
+window.addEventListener("beforeunload", (e) => {
+  if (dirty || busy) { e.preventDefault(); e.returnValue = ""; }
+});
+
+render("src");
+render("dst");
+</script>
+</body>
+</html>

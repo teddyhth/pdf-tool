@@ -11,16 +11,61 @@
 
 ## 下載
 
-| 你的電腦 | 下載檔案 | 教學 |
+有兩種版本，功能相同，擇一使用即可：
+
+| 版本 | 適合 | 下載 | 教學 |
+|---|---|---|---|
+| **瀏覽器版（推薦）** | 任何電腦（Windows、Mac、Intel Mac 皆可）；不想執行 exe / App | [⬇ PDFTool.html](https://github.com/teddyhth/pdf-tool/releases/latest/download/PDFTool.html) | [瀏覽器版使用教學](#瀏覽器版使用教學) |
+| 執行檔版：Windows 10 / 11 | 需要離線使用 | [⬇ PDFTool-Windows.exe](https://github.com/teddyhth/pdf-tool/releases/latest/download/PDFTool-Windows.exe) | [Windows 使用教學](#windows-使用教學) |
+| 執行檔版：Mac（Apple 晶片） | 需要離線使用 | [⬇ PDFTool-Mac.zip](https://github.com/teddyhth/pdf-tool/releases/latest/download/PDFTool-Mac.zip) | [Mac 使用教學](#mac-使用教學) |
+
+**兩種版本的差別**
+
+| | 瀏覽器版 | 執行檔版 |
 |---|---|---|
-| **Windows 10 / 11** | [⬇ PDFTool-Windows.exe](https://github.com/teddyhth/pdf-tool/releases/latest/download/PDFTool-Windows.exe) | [Windows 使用教學](#windows-使用教學) |
-| **Mac（Apple 晶片：M1、M2、M3、M4…）** | [⬇ PDFTool-Mac.zip](https://github.com/teddyhth/pdf-tool/releases/latest/download/PDFTool-Mac.zip) | [Mac 使用教學](#mac-使用教學) |
-| **Mac（Intel 晶片）** | 無執行檔 | [從原始碼執行](#從原始碼執行) |
+| 安裝 | 不用安裝，用瀏覽器打開就能用 | 不用安裝，但要允許執行未簽章的程式 |
+| 安全警告 | 沒有 | 第一次開啟會跳出 Windows / Mac 的安全警告 |
+| 網路 | 每次開啟需要網路（下載約 4 MB 的 PDF 引擎）；**PDF 檔本身不會上傳** | 完全離線 |
+| 壓縮後大小 | 比執行檔版大約 1.4 倍（使用的 JPEG 編碼器不同） | 較小 |
+| 輸出位置 | 存到瀏覽器的「下載」資料夾 | 可選擇資料夾 |
 
 > **不知道 Mac 是哪種晶片？** 點螢幕左上角  →「關於這台 Mac」，
 > 「晶片」寫 **Apple M…** 就是 Apple 晶片；寫「處理器 Intel…」就是 Intel。
 
 所有版本也可以在 [Releases 頁面](https://github.com/teddyhth/pdf-tool/releases/latest) 找到。
+
+---
+
+## 瀏覽器版使用教學
+
+一個 HTML 檔，用瀏覽器打開就能用，不需要安裝或執行任何程式。
+支援 Chrome、Edge、Safari、Firefox 的近期版本。
+
+### 開啟
+
+1. **下載**：點上方的「⬇ PDFTool.html」，存到桌面或任何資料夾。
+2. **雙擊** `PDFTool.html`，會用預設瀏覽器打開。
+   - 若是用其他程式打開（例如文字編輯器）：在檔案上按右鍵 →「**開啟檔案**」（Windows）或「**打開檔案的應用程式**」（Mac）→ 選 **Chrome**、**Edge** 或 **Safari**。
+3. 等右上角顯示「**PDF 引擎已就緒**」就可以開始使用（需要網路，通常幾秒鐘）。
+
+### 使用
+
+- 畫面和執行檔版一樣分成「**解鎖 / 壓縮**」和「**頁面編輯**」兩個分頁，操作方式請看[解鎖與壓縮](#解鎖與壓縮)和[頁面編輯](#頁面編輯)。
+- 可以直接把 PDF 檔從桌面或資料夾**拖進網頁**。
+- 有開啟密碼的檔案：在清單該列的密碼欄填入，再按「開始處理」。
+- 處理完按「**下載**」或「**全部下載**」，檔案會存到瀏覽器的「**下載**」資料夾。
+  一次下載多個檔案時，瀏覽器可能會詢問「是否允許下載多個檔案」，請選「允許」。
+- 頁面編輯完成後按「**下載 PDF**」。
+
+### 為什麼安全？
+
+- 所有處理都在瀏覽器裡完成，**PDF 檔不會離開你的電腦**。
+- 網頁只會連線到一個地方：從 jsDelivr 下載固定版本的 PDF 引擎
+  （[MuPDF](https://mupdf.com/)，和執行檔版用的是同一套引擎）。
+- 網頁內建瀏覽器的安全規則（Content Security Policy），**禁止連線到其他任何網址**，
+  就算程式有問題也無法把檔案傳出去。
+- 想自己確認：按 `F12`（Mac：`⌥ + ⌘ + I`）打開開發人員工具 →「**網路 / Network**」分頁，
+  處理檔案時不會出現任何上傳的連線。
 
 ---
 
@@ -51,7 +96,7 @@
 
 ## Mac 使用教學
 
-適用 Apple 晶片的 Mac。Intel Mac 請改用[從原始碼執行](#從原始碼執行)。
+適用 Apple 晶片的 Mac。Intel Mac 請改用[瀏覽器版](#瀏覽器版使用教學)。
 
 ### 第一次開啟
 
@@ -161,14 +206,14 @@
 ## 更新與移除
 
 - **更新**：從[下載](#下載)重新下載最新版，取代舊的檔案即可。
-- **移除**：Windows 直接刪除 `PDFTool-Windows.exe`；Mac 把 `PDFTool` 從「應用程式」拖到垃圾桶。
+- **移除**：瀏覽器版直接刪除 `PDFTool.html`；Windows 刪除 `PDFTool-Windows.exe`；Mac 把 `PDFTool` 從「應用程式」拖到垃圾桶。
   程式不會在電腦留下其他檔案。
 
 ---
 
 ## 從原始碼執行
 
-適用：**Intel Mac**、執行檔被防毒軟體擋住、或想自行修改程式。第一次需要網路，會自動安裝所需環境（約 1–3 分鐘）。
+適用：想自行修改程式，或需要在 Intel Mac 上離線使用。一般使用建議直接用[瀏覽器版](#瀏覽器版使用教學)。第一次需要網路，會自動安裝所需環境（約 1–3 分鐘）。
 
 <details>
 <summary><b>Windows 步驟</b></summary>
@@ -231,7 +276,7 @@
 重新組合頁面時不會保留原檔的書籤，頁面內容、文字與圖片都會完整保留。
 
 **Q：防毒軟體說 exe 有病毒？**
-沒有數位簽章的打包程式偶爾會被誤判。可以改用[從原始碼執行](#從原始碼執行)。
+沒有數位簽章的打包程式偶爾會被誤判。可以改用不需要執行程式的[瀏覽器版](#瀏覽器版使用教學)。
 
 **Q：檔案會被上傳嗎？**
 不會。所有處理都在你的電腦上完成。
@@ -251,6 +296,7 @@ pdftool/core.py        解鎖、壓縮邏輯（不依賴介面，可單獨匯入
 pdftool/pages.py       頁面重新排列、跨檔合併邏輯（不依賴介面）
 pdftool/gui.py         Tkinter 主視窗與「解鎖 / 壓縮」分頁
 pdftool/page_editor.py 「頁面編輯」分頁（縮圖拖放）
+PDF工具.html          瀏覽器版（單一檔案，發布時改名為 PDFTool.html）
 pdftool/selftest.py    自我檢查（CI 用來確認打包結果能正常運作）
 requirements.txt       相依套件（PyMuPDF 1.x、Pillow）
 .github/workflows/     GitHub Actions：自動打包、自我檢查並發布
